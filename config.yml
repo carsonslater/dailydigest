@@ -1,0 +1,28 @@
+# Substack Daily Newspaper Configuration
+
+# Your Substack Profile URL (e.g., https://substack.com/@yourusername)
+# This is used to automatically detect who you follow.
+profile_url: "https://substack.com/@yourusername"
+
+# Fallback: Hardcoded list of Substack URLs (if automatic detection is skipped)
+substack_urls:
+  - "https://rawandferal.substack.com"
+
+# Newspaper Title (optional)
+newspaper_title: "My Daily Digest"
+
+# RSS endpoint is usually /feed
+rss_path: "/feed"
+
+# Email Configuration
+email:
+  to: "carsonslater7@gmail.com"
+  from: "carsonslater7@gmail.com"
+  subject: "Your Daily Substack Newspaper"
+  smtp_provider: "gmail"
+  smtp_user: "carsonslater7@gmail.com"
+  # The password should be stored in the SMTP_PASSWORD environment variable
+  pass_envvar: "SMTP_PASSWORD"
+
+# Output settings
+output_dir: "output"
