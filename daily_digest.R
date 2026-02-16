@@ -45,71 +45,61 @@ if (length(subscribed_urls) == 0) {
   stop("No Substack URLs found to process. Please set profile_url, substack_urls, or provide an OPML file.")
 }
 
-# 3. Fetch all posts from the last X days
-all_post_urls <- c()
-threshold_days <- config$days_threshold %||% 3
-threshold_date <- Sys.time() - days(threshold_days)
-
-for (url in subscribed_urls) {
-  message(glue("Processing {url}..."))
-  rss_url <- paste0(str_replace_all(url, "/+$", ""), "/feed")
-
-  tryCatch(
-    {
-      rss <- read_xml(rss_url)
-      items <- xml_find_all(rss, ".//item")
-
-      if (length(items) > 0) {
-        count <- 0
-        for (item in items) {
-          pub_date_str <- xml_text(xml_find_first(item, ".//pubDate"))
-          # Substack RSS format: "Fri, 13 Feb 2026 12:00:00 GMT"
-          # lubridate's parse_date_time is robust if we specify the main components
-          pub_date <- parse_date_time(pub_date_str, "a d b Y H M S")
-
-          if (!is.na(pub_date) && pub_date >= threshold_date) {
-            post_title <- xml_text(xml_find_first(item, ".//title"))
-            post_link <- xml_text(xml_find_first(item, ".//link"))
-            all_post_urls <- c(all_post_urls, post_link)
-            count <- count + 1
-            message(glue("  + Found: '{post_title}' ({format(pub_date, '%b %d')})"))
-          }
-        }
-        if (count == 0) message(glue("  No posts in the last {threshold_days} days."))
-      } else {
-        message(glue("  No posts found in feed for {url}"))
-      }
-    },
-    error = function(e) {
-      message(glue("  Error fetching {url}: {e$message}"))
-    }
-  )
-}
-
-if (length(all_post_urls) == 0) {
-  stop("No posts found from the last ", threshold_days, " days across all subscriptions.")
-}
-
-# 4. Generate the PDF
-source(here("helpers", "pdf_generator.R"))
+# 3. Generate the Quarto Digest
+source(here("helpers", "generate_digest_qmd.R"))
 
 # Ensure output directory exists
 if (!dir.exists(config$output_dir)) {
   dir.create(config$output_dir)
 }
 
-if (length(all_post_urls) > 15) {
-  message(glue("WARNING: Found {length(all_post_urls)} posts. substackprint.com works best with <15 articles. Some content may be heavy."))
-}
+# Update config with all subscribed URLs for the generator
+config$substack_urls <- subscribed_urls
 
+qmd_path <- generate_digest_qmd(config)
+
+# 4. Render the PDF using Quarto and Typst
 snapshot_ts <- format(Sys.Date(), "%Y%m%d")
 pdf_filename <- glue("{snapshot_ts}_daily_digest.pdf")
-pdf_path <- here(config$output_dir, pdf_filename)
+pdf_path <- file.path(config$output_dir, pdf_filename)
 
-generate_newspaper_pdf(all_post_urls, pdf_path, title = config$newspaper_title)
+# Clean up any existing PDF from today to avoid sending old content
+if (file.exists(pdf_path)) {
+  message("Removing existing PDF from today...")
+  file.remove(pdf_path)
+}
 
-# 5. Send the email
+message("Rendering PDF with Quarto...")
+# Use shQuote for paths and handle exit code
+render_cmd <- glue("quarto render {shQuote(qmd_path)} --to typst --output {shQuote(pdf_filename)} -M keep-typ:true")
+exit_code <- system(render_cmd)
+
+if (exit_code != 0) {
+  stop("Quarto render failed with exit code ", exit_code)
+}
+
+# Move PDF to output dir if it's not already there
+generated_pdf <- here(pdf_filename)
+if (file.exists(generated_pdf)) {
+  file.rename(generated_pdf, pdf_path)
+}
+
+if (!file.exists(pdf_path)) {
+  stop("Failed to find generated PDF at: ", pdf_path)
+}
+
+# 5. Send the email and cleanup
 source(here("helpers", "email_sender.R"))
 send_newspaper_email(pdf_path, config)
+
+# Cleanup
+# if (file.exists(pdf_path)) {
+#   message("Deleting PDF as requested...")
+#   file.remove(pdf_path)
+# }
+
+# if (file.exists(qmd_path)) {
+#   file.remove(qmd_path)
+# }
 
 message("Done! Daily digest complete.")
