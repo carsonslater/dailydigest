@@ -1,12 +1,18 @@
-# Substack Daily Newspaper Configuration
-
 # Your Substack Profile URL (e.g., https://substack.com/@yourusername)
 # This is used to automatically detect who you follow.
-profile_url: "https://substack.com/@yourusername"
+profile_url: "https://substack.com/@carsonslater"
+
+# Threshold for how many days back to fetch posts
+days_threshold: 3
+
+# (Optional) OPML file exported from Substack Settings
+# If this file exists, it will be used to get your full list of subscriptions.
+opml_file: "substack_subscriptions.opml"
 
 # Fallback: Hardcoded list of Substack URLs (if automatic detection is skipped)
 substack_urls:
-  - "https://rawandferal.substack.com"
+  - "https://masonking.substack.com"
+  - "https://drakeosborn.substack.com"
 
 # Newspaper Title (optional)
 newspaper_title: "My Daily Digest"

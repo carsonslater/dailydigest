@@ -1,0 +1,10 @@
+# Substack Daily Digest Git Ignore
+output/
+*.pdf
+*.png
+*.html
+*.opml
+.Rhistory
+.RData
+.Rproj.user
+.DS_Store

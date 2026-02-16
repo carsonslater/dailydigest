@@ -14,45 +14,80 @@ if (!file.exists(config_path)) {
 }
 config <- yaml::read_yaml(config_path)
 
-# 2. Detect Subscriptions (Automatic or Manual)
+# 2. Get Subscribed URLs (Automatic, Manual, or OPML)
 source(here("helpers", "subscription_detector.R"))
-detected_urls <- detect_subscriptions(config$profile_url)
 
-# Merge detected with manual list, keeping unique
-subscribed_urls <- unique(c(detected_urls, config$substack_urls))
+# Start with manual list
+subscribed_urls <- config$substack_urls
 
-if (length(subscribed_urls) == 0) {
-  stop("No Substack URLs found to process. Please set profile_url or substack_urls in config.yml.")
+# Add from Profile if profile_url is set
+if (!is.null(config$profile_url) && config$profile_url != "") {
+  detected_urls <- detect_subscriptions(config$profile_url)
+  subscribed_urls <- c(subscribed_urls, detected_urls)
 }
 
-# 3. Fetch latest posts from all detected Substacks
-all_post_urls <- c()
-
-for (url in subscribed_urls) {
-  message(glue("Fetching latest post from {url}..."))
-  rss_url <- paste0(url, config$rss_path) %>% str_replace_all("/+$", "") %>% paste0("/feed")
-  
-  tryCatch({
-    rss <- read_xml(rss_url)
-    items <- xml_find_all(rss, ".//item")
-    
-    if (length(items) > 0) {
-      latest_item <- items[1]
-      post_title <- xml_text(xml_find_first(latest_item, ".//title"))
-      post_link <- xml_text(xml_find_first(latest_item, ".//link"))
-      
-      message(glue("  Found: '{post_title}'"))
-      all_post_urls <- c(all_post_urls, post_link)
-    } else {
-      message(glue("  No posts found for {url}"))
-    }
-  }, error = function(e) {
-    message(glue("  Error fetching {url}: {e$message}"))
+# Add from OPML if file exists
+opml_path <- here(config$opml_file %||% "substack_subscriptions.opml")
+if (file.exists(opml_path)) {
+  message(glue("Importing subscriptions from OPML: {basename(opml_path)}"))
+  try({
+    opml <- read_xml(opml_path)
+    opml_links <- xml_find_all(opml, "//outline[@type='rss']") %>%
+      xml_attr("htmlUrl") %>%
+      keep(~ !is.na(.x))
+    subscribed_urls <- c(subscribed_urls, opml_links)
   })
 }
 
+subscribed_urls <- unique(subscribed_urls)
+
+if (length(subscribed_urls) == 0) {
+  stop("No Substack URLs found to process. Please set profile_url, substack_urls, or provide an OPML file.")
+}
+
+# 3. Fetch all posts from the last X days
+all_post_urls <- c()
+threshold_days <- config$days_threshold %||% 3
+threshold_date <- Sys.time() - days(threshold_days)
+
+for (url in subscribed_urls) {
+  message(glue("Processing {url}..."))
+  rss_url <- paste0(str_replace_all(url, "/+$", ""), "/feed")
+
+  tryCatch(
+    {
+      rss <- read_xml(rss_url)
+      items <- xml_find_all(rss, ".//item")
+
+      if (length(items) > 0) {
+        count <- 0
+        for (item in items) {
+          pub_date_str <- xml_text(xml_find_first(item, ".//pubDate"))
+          # Substack RSS format: "Fri, 13 Feb 2026 12:00:00 GMT"
+          # lubridate's parse_date_time is robust if we specify the main components
+          pub_date <- parse_date_time(pub_date_str, "a d b Y H M S")
+
+          if (!is.na(pub_date) && pub_date >= threshold_date) {
+            post_title <- xml_text(xml_find_first(item, ".//title"))
+            post_link <- xml_text(xml_find_first(item, ".//link"))
+            all_post_urls <- c(all_post_urls, post_link)
+            count <- count + 1
+            message(glue("  + Found: '{post_title}' ({format(pub_date, '%b %d')})"))
+          }
+        }
+        if (count == 0) message(glue("  No posts in the last {threshold_days} days."))
+      } else {
+        message(glue("  No posts found in feed for {url}"))
+      }
+    },
+    error = function(e) {
+      message(glue("  Error fetching {url}: {e$message}"))
+    }
+  )
+}
+
 if (length(all_post_urls) == 0) {
-  stop("No posts found in any of the RSS feeds.")
+  stop("No posts found from the last ", threshold_days, " days across all subscriptions.")
 }
 
 # 4. Generate the PDF
@@ -61,6 +96,10 @@ source(here("helpers", "pdf_generator.R"))
 # Ensure output directory exists
 if (!dir.exists(config$output_dir)) {
   dir.create(config$output_dir)
+}
+
+if (length(all_post_urls) > 15) {
+  message(glue("WARNING: Found {length(all_post_urls)} posts. substackprint.com works best with <15 articles. Some content may be heavy."))
 }
 
 snapshot_ts <- format(Sys.Date(), "%Y%m%d")
