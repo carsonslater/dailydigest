@@ -7,7 +7,7 @@ output/
 *.pdf
 *.png
 *.html
-*.opml
+
 cron.log
 daily_digest.log
 substack2markdown_repo/

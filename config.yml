@@ -7,7 +7,7 @@ days_threshold: 3
 
 # (Optional) OPML file exported from Substack Settings
 # If this file exists, it will be used to get your full list of subscriptions.
-opml_file: "substack_subscriptions.opml"
+opml_file: "substack-publications.opml"
 
 # Fallback: Hardcoded list of Substack URLs (if automatic detection is skipped)
 substack_urls:
