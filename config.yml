@@ -3,7 +3,7 @@
 profile_url: "https://substack.com/@carsonslater"
 
 # Threshold for how many days back to fetch posts
-days_threshold: 3
+days_threshold: 1
 
 # (Optional) OPML file exported from Substack Settings
 # If this file exists, it will be used to get your full list of subscriptions.
