@@ -7,3 +7,5 @@ output/
 .RData
 .Rproj.user
 .DS_Store
+
+script.js
